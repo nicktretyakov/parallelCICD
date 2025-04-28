@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.log
+.venv/
+env/
+data/task_history.csv
+ml_model/*.joblib
+.git/
+.gitignore
+.vscode/
+.idx/
+devserver.sh

@@ -1,0 +1,53 @@
+# Example pipeline configuration file in YAML format.
+
+pipeline:
+  name: Sample ML Pipeline
+  description: A simple example showcasing task dependencies and parameters.
+
+tasks:
+  - name: ingest_data_A
+    type: DataIngestionTask # Refers to a Python class name
+    parameters:
+      dataset_size_gb: 15
+      source: internal
+    retries: 2
+    retry_delay: 5
+
+  - name: ingest_data_B
+    type: DataIngestionTask
+    parameters:
+      dataset_size_gb: 7
+      source: external
+    retries: 1
+
+  - name: process_data_A
+    type: DataProcessingTask
+    dependencies:
+      - ingest_data_A
+    parameters:
+      processing_intensity: high
+
+  - name: process_data_B
+    type: DataProcessingTask
+    dependencies:
+      - ingest_data_B
+    parameters:
+      processing_intensity: medium
+
+  - name: train_model_X
+    type: ModelTrainingTask
+    dependencies:
+      - process_data_A
+      - process_data_B
+    parameters:
+      model_type: linear
+      epochs: 150
+
+  - name: train_model_Y
+    type: ModelTrainingTask
+    dependencies:
+      - process_data_B
+    parameters:
+      model_type: boosted_tree
+      epochs: 75
+      learning_rate: 0.05

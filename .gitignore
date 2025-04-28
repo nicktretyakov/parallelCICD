@@ -1,0 +1,24 @@
+# Ignore virtual environment directory
+.venv/
+
+# Ignore compiled Python files
+__pycache__/
+*.pyc
+
+# Ignore editor/IDE specific files
+.vscode/
+*.swp
+*~
+
+# Ignore test and coverage related files
+.coverage
+.pytest_cache/
+
+# Ignore distribution and packaging files
+dist/
+*.egg-info/
+
+# Ignore generated data files
+data/task_history.csv
+ml_model/task_predictor_model.joblib
+

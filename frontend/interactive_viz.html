@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Interactive Pipeline Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.5.1/dist/mermaid.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      line-height: 1.6;
+      margin: 20px;
+      background-color: #f4f4f4;
+      color: #333;
+    }
+    .container {
+      max-width: 1200px;
+      margin: auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    h1, h2 {
+      color: #555;
+    }
+    .section {
+      margin-bottom: 30px;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .mermaid {
+      margin-top: 20px;
+      background: #fff;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto; /* Add scroll for wide graphs */
+    }
+    #taskStatus, #historicalData, #taskLogs {
+      margin-top: 10px;
+      white-space: pre-wrap; /* Preserve line breaks in logs */
+      background: #eee;
+      padding: 10px;
+      border-radius: 4px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 0.9em;
+    }
+    button {
+      padding: 10px 15px;
+      background-color: #5cb85c;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1em;
+      margin-right: 10px;
+    }
+    button:hover {
+      background-color: #4cae4c;
+    }
+     button:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+     }
+    .error {
+      color: red;
+      font-weight: bold;
+    }
+    .task-status-item {
+        margin-bottom: 5px;
+        padding: 5px;
+        border-bottom: 1px solid #eee;
+    }
+    .status-running { color: blue; }
+    .status-success { color: green; }
+    .status-failure { color: red; }
+    .status-not_run_yet { color: gray; }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+        font-size: 0.9em;
+    }
+    th, td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+    }
+    th {
+        background-color: #f2f2f2;
+    }
+    tr:nth-child(even) {background-color: #f9f9f9;}
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>ML CI/CD Pipeline Dashboard</h1>
+
+     <div class="section">
+        <h2>Control Pipeline</h2>
+        <button onclick="triggerPipeline()" id="triggerButton">Trigger New Run</button>
+        <button onclick="fetchTaskStatus()">Refresh Status</button>
+         <p id="triggerMessage"></p>
+    </div>
+
+    <div class="section">
+      <h2>Pipeline Structure</h2>
+      <div class="mermaid" id="pipelineGraph">Loading pipeline graph...</div>
+    </div>
+
+    <div class="section">
+      <h2>Current Task Status</h2>
+      <div id="taskStatus">Loading task status...</div>
+    </div>
+
+    <div class="section">
+      <h2>Historical Task Data</h2>
+      <div id="historicalData">Loading historical data...</div>
+    </div>
+
+     <div class="section">
+      <h2>Task Logs</h2>
+      <p>Click on a task name in the status list above to load its logs (if available and backend is configured).</p>
+      <div id="taskLogs">Select a task to view logs...</div>
+    </div>
+
+
+  </div>
+
+  <script>
+    // Mermaid will be initialized after fetching the graph data
+    // mermaid.initialize({ startOnLoad: true });
+
+    const API_BASE_URL = 'http://127.0.0.1:5000';
+    const METRICS_URL = 'http://127.0.0.1:8000/metrics';
+
+    // Basic Auth credentials (for development purposes, use a more secure method in production)
+    const API_USERNAME = 'admin';
+    const API_PASSWORD = 'supersecretpassword';
+    const BASIC_AUTH_HEADER = 'Basic ' + btoa(API_USERNAME + ':' + API_PASSWORD);
+
+    // Polling interval (in milliseconds)
+    const POLLING_INTERVAL = 5000; // Poll every 5 seconds
+
+    // --- Data Fetching Functions ---
+
+     async function fetchData(endpoint) {
+        try {
+            const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                headers: {
+                    'Authorization': BASIC_AUTH_HEADER
+                }
+            });
+            if (!response.ok) {
+              const errorText = await response.text();
+              throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+            }
+            return await response.json();
+        } catch (error) {
+            console.error(`Error fetching ${endpoint}:`, error);
+             document.getElementById('triggerMessage').innerHTML = '<div class="error">Failed to connect to API. Is the backend running?</div>';
+            throw error; // Re-throw to be caught by specific display functions
+        }
+    }
+
+    async function fetchPipelineStructure() {
+        const graphDiv = document.getElementById('pipelineGraph');
+        graphDiv.innerHTML = 'Loading pipeline graph...';
+        try {
+            const data = await fetchData('/pipeline/structure');
+            if (data && data.tasks && data.dependencies) {
+                let mermaidSyntax = 'graph TD
+';
+
+                // Add tasks (nodes)
+                data.tasks.forEach(task => {
+                    mermaidSyntax += `    ${task.name}
+`;
+                });
+
+                // Add dependencies (edges)
+                data.dependencies.forEach(dep => {
+                     // Assuming dependency format is { from: task_name_A, to: task_name_B }
+                    mermaidSyntax += `    ${dep.from} --> ${dep.to}
+`;
+                });
+
+                // Render the graph
+                mermaid.render('graphDivSvg', mermaidSyntax).then(({ svg, bindFunctions }) => {
+                    graphDiv.innerHTML = svg;
+                    // if (bindFunctions) bindFunctions(); // Needed for interactive elements in graph
+                }).catch(error => {
+                     console.error('Mermaid rendering error:', error);
+                     graphDiv.innerHTML = '<div class="error">Failed to render graph. Check browser console for details.</div>';
+                });
+
+            } else {
+                graphDiv.innerHTML = '<div class="error">Invalid pipeline structure data from API.</div>';
+            }
+        } catch (error) {
+            graphDiv.innerHTML = '<div class="error">Failed to fetch pipeline structure. Ensure the backend API is running and the /pipeline/structure endpoint is implemented.</div>';
+        }
+    }
+
+
+    async function fetchTaskStatus() {
+      const statusDiv = document.getElementById('taskStatus');
+      // Avoid clearing content completely on each poll if there's data
+      if(statusDiv.innerHTML.includes('Loading') || statusDiv.innerHTML.includes('Failed')) {
+         statusDiv.innerHTML = 'Fetching task status...';
+      }
+
+      try {
+        const data = await fetchData('/status');
+        if (data && data.status_summary) {
+          let statusHtml = '';
+          data.status_summary.forEach(task => {
+            // Add a data attribute for task name to fetch logs easily
+            statusHtml += `<div class="task-status-item status-${task.status}" data-task-name="${task.task_name}">
+                            <strong>${task.task_name}:</strong> ${task.status}
+                          </div>`;
+          });
+          statusDiv.innerHTML = statusHtml;
+
+           // Add event listeners to task items to fetch logs on click
+           statusDiv.querySelectorAll('.task-status-item').forEach(item => {
+              item.addEventListener('click', () => {
+                  const taskName = item.getAttribute('data-task-name');
+                  if (taskName) {
+                      fetchTaskLogs(taskName);
+                  }
+              });
+           });
+
+        } else {
+          statusDiv.innerHTML = '<div class="error">Invalid task status data from API.</div>';
+        }
+      } catch (error) {
+        // Error handled in fetchData, specific message already shown
+         statusDiv.innerHTML = '<div class="error">Failed to fetch task status. Ensure the backend API is running and the /status endpoint is implemented.</div>';
+      }
+    }
+
+    async function fetchTaskLogs(taskName) {
+       const logsDiv = document.getElementById('taskLogs');
+       logsDiv.innerHTML = `Fetching logs for ${taskName}...`;
+       try {
+         const data = await fetchData(`/tasks/${taskName}/logs`);
+         if (data && data.logs !== undefined) { // Check for the 'logs' key
+           logsDiv.innerHTML = '<pre>' + data.logs + '</pre>';
+         } else {
+            logsDiv.innerHTML = `<div class="error">Could not retrieve logs for ${taskName}. Backend might not be configured for logs or returned invalid data.</div>`;
+         }
+       } catch (error) {
+         logsDiv.innerHTML = `<div class="error">Failed to fetch logs for ${taskName}. Ensure the backend API is running and the /tasks/{task_name}/logs endpoint is implemented.</div>`;
+       }
+    }
+
+    async function fetchHistoricalData() {
+       const historyDiv = document.getElementById('historicalData');
+        if(historyDiv.innerHTML.includes('Loading') || historyDiv.innerHTML.includes('Failed')) {
+             historyDiv.innerHTML = 'Fetching historical data...';
+         }
+       try {
+         const data = await fetchData('/history');
+         if (data && data.history) {
+           let historyHtml = '<table><thead><tr><th>Task Name</th><th>Status</th><th>Duration (s)</th><th>Timestamp</th><th>Parameters</th><th>CPU Usage</th><th>Memory Usage</th></tr></thead><tbody>';
+           data.history.forEach(run => {
+             historyHtml += '<tr>';
+             historyHtml += `<td>${run.task_name || 'N/A'}</td>`;
+             historyHtml += `<td>${run.status || 'N/A'}</td>`;
+             historyHtml += `<td>${run.duration_seconds ? parseFloat(run.duration_seconds).toFixed(2) : 'N/A'}</td>`;
+             historyHtml += `<td>${run.timestamp ? new Date(run.timestamp * 1000).toLocaleString() : 'N/A'}</td>`; // Convert timestamp to readable date
+             historyHtml += `<td>${run.parameters ? JSON.stringify(run.parameters, null, 2) : 'N/A'}</td>`;
+             historyHtml += `<td>${run.cpu_usage ? parseFloat(run.cpu_usage).toFixed(2) : 'N/A'}</td>`;
+             historyHtml += `<td>${run.memory_usage ? parseFloat(run.memory_usage).toFixed(2) : 'N/A'}</td>`;
+             historyHtml += '</tr>';
+           });
+           historyHtml += '</tbody></table>';
+           historyDiv.innerHTML = historyHtml;
+         } else {
+           historyDiv.innerHTML = '<div class="error">Invalid historical data from API.</div>';
+         }
+       } catch (error) {
+         historyDiv.innerHTML = '<div class="error">Failed to fetch historical data. Ensure the backend API is running and the /history endpoint is implemented.</div>';
+       }
+    }
+
+    async function triggerPipeline() {
+        const triggerButton = document.getElementById('triggerButton');
+        const triggerMessage = document.getElementById('triggerMessage');
+        triggerButton.disabled = true; // Disable button while triggering
+        triggerMessage.innerHTML = 'Triggering pipeline...';
+
+        try {
+            // You can optionally prompt for config path or parameters here
+            const configPath = 'ml_ci_cd_python/pipeline_config.yaml'; // Default config
+
+            const response = await fetch(`${API_BASE_URL}/trigger`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': BASIC_AUTH_HEADER,
+                    'Content-Type': 'application/json'
+                },
+                 body: JSON.stringify({ config_path: configPath })
+            });
+            if (!response.ok) {
+                 const errorText = await response.text();
+                 throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+            }
+            const result = await response.json();
+            console.log('Pipeline triggered:', result);
+            triggerMessage.innerHTML = '<div style="color: green;">Pipeline triggered successfully!</div>';
+            // Refresh status after triggering
+            fetchTaskStatus();
+            fetchHistoricalData(); // Might take time for new run to appear
+        } catch (error) {
+            console.error('Error triggering pipeline:', error);
+            triggerMessage.innerHTML = `<div class="error">Failed to trigger pipeline: ${error.message}</div>`;
+        } finally {
+            triggerButton.disabled = false; // Re-enable button
+        }
+    }
+
+    // --- Initialization and Polling ---
+
+    document.addEventListener('DOMContentLoaded', () => {
+      // Fetch initial data when the page loads
+      fetchPipelineStructure();
+      fetchTaskStatus();
+      fetchHistoricalData();
+
+      // Set up polling for task status and historical data
+      setInterval(fetchTaskStatus, POLLING_INTERVAL);
+      setInterval(fetchHistoricalData, POLLING_INTERVAL);
+
+      // Note: Real-time logs would require a different approach (e.g., WebSockets)
+    });
+
+  </script>
+
+</body>
+</html>

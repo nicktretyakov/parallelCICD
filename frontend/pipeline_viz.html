@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Pipeline Dependency Visualization</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      line-height: 1.6;
+      margin: 20px;
+    }
+    h1 {
+      color: #333;
+    }
+    .mermaid {
+      margin-top: 30px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Pipeline Dependency Graph</h1>
+
+  <div class="mermaid">
+    graph TD
+    ingest_data_A --> process_data_A
+    ingest_data_B --> process_data_B
+    process_data_A --> train_model_X
+    process_data_B --> train_model_X
+    process_data_B --> train_model_Y
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.5.1/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({ startOnLoad: true });
+  </script>
+</body>
+</html>
